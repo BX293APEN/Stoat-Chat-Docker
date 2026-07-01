@@ -1,57 +1,73 @@
+# YAMLはスペース2つ
 services:
-  # Nginx制御
+  # 1. bootstrap: stoatchat/self-hosted を clone/設定生成し、
+  #    ホストのDockerに対して Stoat本体(15コンテナ前後)を起動する
+  bootstrap:
+    env_file: .env
+
+    container_name: ${CONTAINER_NAME}
+    hostname: ${CONTAINER_NAME}
+
+    build:
+      context: ${Dockerfile_DIR}
+      dockerfile: ${Dockerfile}
+      args:
+        LANG: ${LANG}
+
+    environment:
+      - TZ=${TIME_ZONE}
+      - LANG=${LANG}
+      # PWD はシェルが自動でexportしている環境変数。
+      # "docker compose up" を実行したディレクトリの絶対パスがそのまま入る。
+      - HOST_PROJECT_DIR=${PWD}
+      - REPO_URL=${REPO_URL}
+      - REPO_DIR=${REPO_DIR}
+      - DOMAIN=${DOMAIN}
+      - ENABLE_REVERSE_PROXY=${ENABLE_REVERSE_PROXY}
+      - ENABLE_VIDEO=${ENABLE_VIDEO}
+
+    volumes:
+      # ホストのDockerデーモンを直接操作するためのソケット
+      # 注意: これはこのコンテナにホストへのroot相当の権限を与えることになります
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 重要: コンテナ内でも "ホストと全く同じ絶対パス" にマウントする。
+      # docker.sock越しに発行するdocker composeコマンドは、
+      # bind mountのパスをホスト側の絶対パスとして解釈するため。
+      # ${PWD} を使うことで手動で絶対パスを書く必要がなくなる。
+      - ${PWD}:${PWD}
+
+    working_dir: ${PWD}
+
+    restart: "no"
+
+  # 2. nginx: 将来の公開を見据えた経路管理・証明書管理の窓口
+  #    stoat側のCaddy(ホストの127.0.0.1:8880で待受)へリバースプロキシする
   nginx:
     image: nginx:alpine
+
+    container_name: ${CONTAINER_NAME}_nginx
+
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
     ports:
       - "80:80"
-      - "8000:8000"
-      - "3002:3002"
-      - "3004:3004"
+      - "443:443"
+
     volumes:
-      - ${VOLUME}/nginx/config/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - web
-      - api
-      - autumn
-      - january
-    restart: always
+      # stoat.conf は server{} ブロックのみなので conf.d 配下にマウントする
+      # (nginx公式イメージのデフォルト nginx.conf が conf.d/*.conf を include する)
+      - ${VOLUME}/nginx/config/stoat.conf:/etc/nginx/conf.d/stoat.conf:ro
+      # 証明書を使う場合はここに追加でマウントする(例: certbotのletsencryptディレクトリ)
+      # - ${VOLUME}/nginx/certs:/etc/letsencrypt:ro
 
-  web:
-    image: ghcr.io/revoltchat/client:latest
     environment:
-      - VITE_API_URL=http://${DOMAIN}:8000
-    depends_on:
-      - api
+      - TZ=${TIME_ZONE}
 
-  api:
-    image: ghcr.io/revoltchat/api:latest
-    environment:
-      - REVOLT_MONGO_URI=mongodb://mongo:27017/revolt
-      - REVOLT_REDIS_URI=redis://redis:6379/
-      - REVOLT_APP_URL=http://${DOMAIN}
-      - REVOLT_PUBLIC_URL=http://${DOMAIN}:8000
-    depends_on:
-      - mongo
-      - redis
+    # nginxコンテナから見た 127.0.0.1 は自分自身を指してしまうため、
+    # host.docker.internal 経由でホストの8880番(Caddy)に届かせる
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  autumn:
-    image: ghcr.io/revoltchat/autumn:latest
-    environment:
-      - MONGO_URI=mongodb://mongo:27017/revolt
-    depends_on:
-      - mongo
-
-  january:
-    image: ghcr.io/revoltchat/january:latest
-
-  mongo:
-    image: mongo:6
-    restart: always
-    volumes:
-      - ${VOLUME}/mongo:/data/db
-
-  redis:
-    image: redis:7-alpine
-    restart: always
-    volumes:
-      - ${VOLUME}/redis:/data
+    restart: unless-stopped
