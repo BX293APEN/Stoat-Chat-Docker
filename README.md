@@ -48,9 +48,15 @@ docker compose logs -f nginx       # nginxのアクセス/エラーログ
 
 ## 証明書を使う場合
 
-`stoat.conf`の`ssl_certificate`関連行のコメントを外し、証明書ファイルを
-`linux_data/nginx/certs/`などに置いた上で、`compose.yml`のnginxサービスに
-以下のようなマウントを追加してください。
+`stoat.conf`は今のところ**HTTP(:80)のみ有効**になっています。
+`listen 443 ssl`を証明書なしで生かしたままにするとnginxが起動を拒否してクラッシュループするため、
+HTTPSのserver{}ブロックはあえて全部コメントアウトしてあります。
+
+証明書を取得したら:
+
+1. `stoat.conf`下部のHTTPSブロックのコメントを外す
+2. 証明書ファイルを`linux_data/nginx/certs/`などに置く
+3. `compose.yml`のnginxサービスに以下のようなマウントを追加する
 
 ```yaml
     volumes:
@@ -58,8 +64,26 @@ docker compose logs -f nginx       # nginxのアクセス/エラーログ
       - ${VOLUME}/nginx/certs:/etc/letsencrypt:ro
 ```
 
-certbotでの取得自体はこのnginxコンテナの外(ホスト側のcertbot、または別途webrootモード用の
-サービスを追加するなど)で行う想定です。
+certbotのwebroot認証用に、`stoat.conf`の80番ブロックには
+`/.well-known/acme-challenge/` 用のlocationも用意してあります。
+certbot自体はこのnginxコンテナの外(ホスト側certbot、または別途webrootモード用の
+コンテナを追加するなど)で動かす想定です。webrootを使う場合は
+`/var/www/certbot`をnginxとcertbot双方でマウント共有してください。
+
+## IPアドレス直打ちアクセスの拒否
+
+`stoat.conf`の先頭に`default_server`ブロックを追加してあります。`server_name`(=`raspi5.lan`)に
+一致しないリクエスト(IPアドレス直打ち、知らないHostヘッダでのアクセスなど)は
+全てこのブロックに落ち、`444`(レスポンスを返さず接続だけ切る)で処理されます。
+
+HTTPS化した後にも同様の防御をしたい場合は、`stoat.conf`のHTTPSブロック内コメントにある
+`default_server`用のダミー証明書の作り方も参照してください(TLSはSNIの都合上、
+Hostヘッダより前の段階で証明書を出す必要があるため、HTTP側とは別対応が必要です)。
+
+## 経路を増やしたい場合(他サービスの公開)
+
+`linux_data/nginx/config/`配下に別の`.conf`ファイル(`server{}`ブロック)を追加するだけで、
+nginx公式イメージが自動的に`conf.d/*.conf`を全部読み込みます。`compose.yml`側の変更は不要です。
 
 ## なぜ `host.docker.internal` を使っているか
 
