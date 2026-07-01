@@ -25,6 +25,8 @@ services:
       - DOMAIN=${DOMAIN}
       - ENABLE_REVERSE_PROXY=${ENABLE_REVERSE_PROXY}
       - ENABLE_VIDEO=${ENABLE_VIDEO}
+      # tcmalloc/39bit VA問題を避けるためstart.shがcompose.override.ymlに書き込むMongoDBタグ
+      - MONGO_IMAGE_TAG=${MONGO_IMAGE_TAG}
 
     volumes:
       # ホストのDockerデーモンを直接操作するためのソケット
