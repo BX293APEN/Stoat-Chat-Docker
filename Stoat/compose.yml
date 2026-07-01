@@ -25,7 +25,6 @@ services:
       - DOMAIN=${DOMAIN}
       - ENABLE_REVERSE_PROXY=${ENABLE_REVERSE_PROXY}
       - ENABLE_VIDEO=${ENABLE_VIDEO}
-      - USE_HTTPS=${USE_HTTPS}
 
     volumes:
       # ホストのDockerデーモンを直接操作するためのソケット
