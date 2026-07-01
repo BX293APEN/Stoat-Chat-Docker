@@ -25,6 +25,7 @@ services:
       - DOMAIN=${DOMAIN}
       - ENABLE_REVERSE_PROXY=${ENABLE_REVERSE_PROXY}
       - ENABLE_VIDEO=${ENABLE_VIDEO}
+      - USE_HTTPS=${USE_HTTPS}
 
     volumes:
       # ホストのDockerデーモンを直接操作するためのソケット
@@ -59,8 +60,8 @@ services:
       # stoat.conf は server{} ブロックのみなので conf.d 配下にマウントする
       # (nginx公式イメージのデフォルト nginx.conf が conf.d/*.conf を include する)
       - ${VOLUME}/nginx/config/stoat.conf:/etc/nginx/conf.d/stoat.conf:ro
-      # 証明書を使う場合はここに追加でマウントする(例: certbotのletsencryptディレクトリ)
-      # - ${VOLUME}/nginx/certs:/etc/letsencrypt:ro
+      # 自己署名証明書 (linux_data/cert/ 配下)
+      - ${VOLUME}/cert:/etc/nginx/certs:ro
 
     environment:
       - TZ=${TIME_ZONE}
